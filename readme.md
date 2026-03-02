@@ -42,6 +42,45 @@ The system is designed with schema enforcement, partition optimization, and Athe
 
 ---
 
+## Project Structure
+
+```bash
+batch-pipeline
+├── config
+│   └── config.yaml
+├── data
+│   └── input
+│       └── orders.csv
+├── Dockerfile
+├── docs
+│   └── architecture.png
+├── main.py
+├── Makefile
+├── readme.md
+├── requirements.txt
+├── spark
+│   ├── __pycache__
+│   │   └── spark_session.cpython-310.pyc
+│   └── spark_session.py
+├── sql
+│   └── athena_queries.sql
+├── src
+│   ├── ingest.py
+│   ├── load.py
+│   ├── __pycache__
+│   │   ├── ingest.cpython-310.pyc
+│   │   ├── load.cpython-310.pyc
+│   │   ├── transform.cpython-310.pyc
+│   │   └── validate.cpython-310.pyc
+│   ├── transform.py
+│   ├── utils
+│   │   ├── logger.py
+│   │   ├── __pycache__
+│   │   └── retry.py
+│   └── validate.py
+└── structure.txt
+```
+
 ## Key Engineering Decisions
 
 - **Parquet format** for columnar storage and improved Athena performance  
@@ -116,8 +155,8 @@ python main.py
 
 ## Author
 
-**Subhajoy Ghosh**
-AWS Certified Data Engineer – Associate
-Associate @ PwC
+- **Subhajoy Ghosh**
+- AWS Certified Data Engineer – Associate
+- Associate @ PwC
 
 ---

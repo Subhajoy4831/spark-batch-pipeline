@@ -1,0 +1,36 @@
+.
+├── config
+│   └── config.yaml
+├── data
+│   └── input
+│       └── orders.csv
+├── Dockerfile
+├── docs
+│   └── architecture.png
+├── main.py
+├── Makefile
+├── readme.md
+├── requirements.txt
+├── spark
+│   ├── __pycache__
+│   │   └── spark_session.cpython-310.pyc
+│   └── spark_session.py
+├── sql
+│   └── athena_queries.sql
+├── src
+│   ├── ingest.py
+│   ├── load.py
+│   ├── __pycache__
+│   │   ├── ingest.cpython-310.pyc
+│   │   ├── load.cpython-310.pyc
+│   │   ├── transform.cpython-310.pyc
+│   │   └── validate.cpython-310.pyc
+│   ├── transform.py
+│   ├── utils
+│   │   ├── logger.py
+│   │   ├── __pycache__
+│   │   └── retry.py
+│   └── validate.py
+└── structure.txt
+
+11 directories, 22 files
