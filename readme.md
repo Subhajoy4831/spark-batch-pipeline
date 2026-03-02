@@ -74,9 +74,20 @@ GROUP BY country;
 
 ## How to Run
 
-1. Configure AWS credentials  
-2. Update S3 bucket path in config file  
-3. Execute:
+1. Build Docker Image
+
+```bash
+docker build -t spark-batch-pipeline .
+```
+
+2. Run Container
+
+```bash
+docker run -v ~/.aws:/root/.aws spark-batch-pipeline
+```
+
+## Alternative: Run Without Docker
+Execute:
 
 ```bash
 python main.py
@@ -93,9 +104,20 @@ python main.py
 
 ---
 
-## Future Enhancements
+## What This Project Demonstrates
 
-- Incremental data loading  
-- Airflow orchestration  
-- EMR deployment  
-- Automated data quality validation  
+- Real-world batch data engineering architecture
+- Spark + S3 cloud integration
+- Metadata-driven analytics via Glue
+- Athena-ready dataset optimization
+- Production-style pipeline structuring
+
+---
+
+## Author
+
+**Subhajoy Ghosh**
+AWS Certified Data Engineer – Associate
+Associate @ PwC
+
+---
