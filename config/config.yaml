@@ -1,0 +1,7 @@
+s3:
+  bucket: de-batch-pipeline-sg
+  raw_path: raw/orders
+  clean_path: cleaned/orders
+
+app:
+  name: batch_pipeline_level_1
