@@ -156,7 +156,7 @@ python main.py
 ## Author
 
 - **Subhajoy Ghosh**
-- AWS Certified Data Engineer – Associate
+- AWS Certified Developer – Associate
 - Associate @ PwC
 
 ---
