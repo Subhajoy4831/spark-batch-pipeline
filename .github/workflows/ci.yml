@@ -74,15 +74,17 @@ jobs:
         run: |
           echo "Waiting for DAG to be parsed by scheduler..."
           for i in $(seq 1 20); do
-            STATUS=$(curl -s -u admin:admin \
-              http://localhost:8085/api/v1/dags/batch_data_pipeline | \
-              python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('dag_id','missing'))" 2>/dev/null)
+            RESPONSE=$(curl -s -u admin:admin http://localhost:8085/api/v1/dags/batch_data_pipeline)
+            echo "API response: $RESPONSE"
+            STATUS=$(echo "$RESPONSE" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('dag_id','missing'))" 2>/dev/null || echo "missing")
             if [ "$STATUS" = "batch_data_pipeline" ]; then
               echo "DAG loaded after $((i * 10))s"
               break
             fi
             if [ "$i" = "20" ]; then
-              echo "Timed out waiting for DAG to load"
+              echo "Timed out. Checking import errors and scheduler logs..."
+              curl -s -u admin:admin http://localhost:8085/api/v1/importErrors | python3 -m json.tool
+              docker compose logs airflow-scheduler --tail=50
               exit 1
             fi
             echo "Attempt $i/20..."
