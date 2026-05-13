@@ -7,6 +7,17 @@ Schedule : Daily at 00:00 UTC
 Tasks    : ingest → validate → transform → load → sync_glue_catalog
 Retries  : 3 attempts with 5-minute back-off per task
 Alerts   : Email on failure / SLA miss (configure SMTP in airflow.cfg)
+
+Staging pattern
+───────────────
+Each task writes its output to an intermediate S3 path so the next task
+reads exactly where the previous one left off. Data is read from source
+only once (in ingest) and processed exactly once per stage.
+
+  ingest    → s3://…/staging/raw/
+  validate  → s3://…/staging/validated/
+  transform → s3://…/staging/transformed/
+  load      → s3://…/cleaned/orders/   (final, partitioned Parquet)
 """
 
 from __future__ import annotations
@@ -19,7 +30,6 @@ from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.utils.trigger_rule import TriggerRule
 
-# ── Import your existing pipeline modules ──────────────────────────────────
 from src.ingest    import ingest
 from src.validate  import validate
 from src.transform import transform
@@ -30,23 +40,26 @@ logger = logging.getLogger(__name__)
 
 # ── Pipeline configuration ─────────────────────────────────────────────────
 PIPELINE_CONFIG = {
-    "s3_raw_path":       "s3a://de-batch-pipeline-sg/raw/orders/",
-    "s3_processed_path": "s3a://de-batch-pipeline-sg/cleaned/orders/",
-    "glue_database":     "de_pipeline_db",
-    "glue_table":        "orders_cleaned",
-    "partition_col":     "order_date",
+    "s3_raw_path":          "s3a://de-batch-pipeline-sg/raw/orders/",
+    "s3_staging_raw":       "s3a://de-batch-pipeline-sg/staging/raw/",
+    "s3_staging_validated": "s3a://de-batch-pipeline-sg/staging/validated/",
+    "s3_staging_transformed":"s3a://de-batch-pipeline-sg/staging/transformed/",
+    "s3_processed_path":    "s3a://de-batch-pipeline-sg/cleaned/orders/",
+    "glue_database":        "de_pipeline_db",
+    "glue_table":           "orders_cleaned",
+    "partition_col":        "order_date",
 }
 
 # ── Default task arguments ─────────────────────────────────────────────────
 default_args = {
-    "owner":            "data-engineering",
-    "depends_on_past":  False,
-    "start_date":       datetime(2026, 1, 1),
-    "email":            ["ghoshsubhajoy2002@gmail.com"],
-    "email_on_failure": True,
-    "email_on_retry":   False,
-    "retries":          3,
-    "retry_delay":      timedelta(minutes=5),
+    "owner":             "data-engineering",
+    "depends_on_past":   False,
+    "start_date":        datetime(2026, 1, 1),
+    "email":             ["ghoshsubhajoy2002@gmail.com"],
+    "email_on_failure":  True,
+    "email_on_retry":    False,
+    "retries":           3,
+    "retry_delay":       timedelta(minutes=5),
     "execution_timeout": timedelta(hours=2),
 }
 
@@ -54,22 +67,22 @@ default_args = {
 # ── Task functions ─────────────────────────────────────────────────────────
 
 def task_ingest(**context) -> None:
-    """Read raw CSV data from S3 and push row count to XCom."""
+    """Read raw CSV from S3, write staging Parquet, push row count to XCom."""
     logger.info("Starting ingestion...")
     spark = get_spark()
     df = ingest(spark, PIPELINE_CONFIG["s3_raw_path"])
     row_count = df.count()
-    logger.info(f"Ingested {row_count:,} rows.")
-    # Push to XCom so downstream tasks can log the same figure
+    df.write.mode("overwrite").parquet(PIPELINE_CONFIG["s3_staging_raw"])
+    logger.info(f"Ingested {row_count:,} rows → staging/raw/")
     context["ti"].xcom_push(key="raw_row_count", value=row_count)
     spark.stop()
 
 
 def task_validate(**context) -> None:
-    """Apply validation rules; fail the task if critical checks don't pass."""
+    """Read staging/raw, filter invalid rows, write staging/validated."""
     logger.info("Starting validation...")
     spark = get_spark()
-    df = ingest(spark, PIPELINE_CONFIG["s3_raw_path"])
+    df = spark.read.parquet(PIPELINE_CONFIG["s3_staging_raw"])
     valid_df, invalid_count = validate(df)
 
     raw_count = context["ti"].xcom_pull(key="raw_row_count", task_ids="ingest")
@@ -82,51 +95,42 @@ def task_validate(**context) -> None:
             f"({invalid_count / raw_count:.1%} of total). Pipeline continues with valid rows only."
         )
 
+    valid_df.write.mode("overwrite").parquet(PIPELINE_CONFIG["s3_staging_validated"])
+    logger.info("Validated data written → staging/validated/")
     context["ti"].xcom_push(key="valid_row_count", value=valid_df.count())
     spark.stop()
 
 
 def task_transform(**context) -> None:
-    """Cast types, apply business rules, and write partitioned Parquet to S3."""
+    """Read staging/validated, apply transformations, write staging/transformed."""
     logger.info("Starting transformation...")
     spark = get_spark()
-    df = ingest(spark, PIPELINE_CONFIG["s3_raw_path"])
-    valid_df, _ = validate(df)
-    transformed_df = transform(valid_df)
-
+    df = spark.read.parquet(PIPELINE_CONFIG["s3_staging_validated"])
+    transformed_df = transform(df)
     row_count = transformed_df.count()
-    logger.info(f"Transformed {row_count:,} rows.")
+    transformed_df.write.mode("overwrite").parquet(PIPELINE_CONFIG["s3_staging_transformed"])
+    logger.info(f"Transformed {row_count:,} rows → staging/transformed/")
     context["ti"].xcom_push(key="transformed_row_count", value=row_count)
     spark.stop()
 
 
 def task_load(**context) -> None:
-    """Write transformed Parquet files to S3 with partition overwrite."""
+    """Read staging/transformed, write final partitioned Parquet to cleaned/orders/."""
     logger.info("Starting load to S3...")
     spark = get_spark()
-    df = ingest(spark, PIPELINE_CONFIG["s3_raw_path"])
-    valid_df, _ = validate(df)
-    transformed_df = transform(valid_df)
-
-    load(
-        df=transformed_df,
-        output_path=PIPELINE_CONFIG["s3_processed_path"],
-    )
-    logger.info("Load complete.")
+    df = spark.read.parquet(PIPELINE_CONFIG["s3_staging_transformed"])
+    load(df, PIPELINE_CONFIG["s3_processed_path"])
+    logger.info("Load complete → cleaned/orders/")
     spark.stop()
 
 
 def task_sync_glue_catalog(**context) -> None:
-    """
-    Sync new S3 partitions with the Glue Data Catalog so Athena picks
-    them up immediately without a manual MSCK REPAIR TABLE.
-    """
+    """Sync new S3 partitions with Glue Catalog so Athena picks them up immediately."""
     import boto3
 
     logger.info("Syncing partitions with Glue Catalog...")
     athena = boto3.client("athena", region_name="ap-south-1")
 
-    # Run MSCK REPAIR TABLE via Athena to register new partitions
     response = athena.start_query_execution(
         QueryString=f"MSCK REPAIR TABLE {PIPELINE_CONFIG['glue_database']}.{PIPELINE_CONFIG['glue_table']}",
         QueryExecutionContext={"Database": PIPELINE_CONFIG["glue_database"]},
@@ -151,18 +155,16 @@ with DAG(
     dag_id="batch_data_pipeline",
     default_args=default_args,
     description="Daily AWS batch pipeline: ingest → validate → transform → load → Glue sync",
-    schedule_interval="0 0 * * *",   # every day at midnight UTC
+    schedule_interval="0 0 * * *",
     catchup=False,
-    max_active_runs=1,               # prevent overlapping runs
+    max_active_runs=1,
     tags=["data-engineering", "aws", "pyspark", "batch"],
     on_failure_callback=task_on_failure_callback,
 ) as dag:
 
-    # ── Sentinels ──────────────────────────────────────────────────────────
     start = EmptyOperator(task_id="start")
     end   = EmptyOperator(task_id="end", trigger_rule=TriggerRule.NONE_FAILED)
 
-    # ── Pipeline tasks ─────────────────────────────────────────────────────
     ingest_op = PythonOperator(
         task_id="ingest",
         python_callable=task_ingest,
@@ -188,5 +190,4 @@ with DAG(
         python_callable=task_sync_glue_catalog,
     )
 
-    # ── Task dependencies (linear pipeline) ───────────────────────────────
     start >> ingest_op >> validate_op >> transform_op >> load_op >> sync_glue >> end
