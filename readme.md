@@ -2,10 +2,12 @@
 
 ![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)
 ![PySpark](https://img.shields.io/badge/PySpark-Enabled-orange?logo=apache-spark)
+![Airflow](https://img.shields.io/badge/Airflow-2.9.1-017CEE?logo=apache-airflow)
 ![AWS](https://img.shields.io/badge/AWS-S3%20%7C%20Glue%20%7C%20Athena-yellow?logo=amazon-aws)
+![CI](https://github.com/Subhajoy4831/spark-batch-pipeline/actions/workflows/ci.yml/badge.svg)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
-**Status:** Fully functional and tested using Amazon Athena queries.
+**Status:** Fully functional, orchestrated with Airflow, and verified end-to-end via GitHub Actions CI.
 
 ---
 
@@ -14,7 +16,7 @@
 This project implements a production-style batch data pipeline on AWS.  
 It ingests transactional CSV data, validates and transforms it using PySpark, writes optimized partitioned Parquet files to Amazon S3, and exposes the dataset for analytics using AWS Glue Data Catalog and Amazon Athena.
 
-The system is designed with schema enforcement, partition optimization, and Athena compatibility in mind.
+The pipeline is orchestrated by Apache Airflow running in Docker, with a full CI/CD pipeline that lints, unit tests, builds, and runs an end-to-end integration test on every push.
 
 ---
 
@@ -26,78 +28,131 @@ The system is designed with schema enforcement, partition optimization, and Athe
 
 ## AWS Services Used
 
-- Amazon S3 – Data lake storage  
-- AWS Glue Data Catalog – Metadata management  
-- Amazon Athena – Serverless SQL querying  
+- Amazon S3 – Data lake storage
+- AWS Glue Data Catalog – Metadata management
+- Amazon Athena – Serverless SQL querying
 
 ---
 
 ## Tech Stack
 
-- Python  
-- PySpark  
-- Parquet  
-- YAML Configuration  
-- Structured Logging  
+- Python
+- PySpark
+- Apache Airflow
+- Docker + Docker Compose
+- Parquet
+- YAML Configuration
+- Structured Logging
+- GitHub Actions CI/CD
 
 ---
 
 ## Project Structure
 
 ```bash
-batch-pipeline
+spark-batch-pipeline
+├── .github
+│   └── workflows
+│       └── ci.yml
 ├── config
-│   └── config.yaml
+│   └── config.yaml
+├── dags
+│   └── batch_pipeline_dag.py
 ├── data
-│   └── input
-│       └── orders.csv
-├── Dockerfile
+│   └── input
+│       └── orders.csv
 ├── docs
-│   └── architecture.png
+│   └── architecture.png
+├── spark
+│   └── spark_session.py
+├── src
+│   ├── ingest.py
+│   ├── load.py
+│   ├── transform.py
+│   ├── validate.py
+│   └── utils
+│       ├── logger.py
+│       └── retry.py
+├── sql
+│   └── athena_queries.sql
+├── tests
+│   ├── test_validate.py
+│   └── test_transform.py
+├── Dockerfile
+├── Dockerfile.airflow
+├── docker-compose.yaml
 ├── main.py
 ├── Makefile
-├── readme.md
+├── pyproject.toml
 ├── requirements.txt
-├── spark
-│   ├── __pycache__
-│   │   └── spark_session.cpython-310.pyc
-│   └── spark_session.py
-├── sql
-│   └── athena_queries.sql
-├── src
-│   ├── ingest.py
-│   ├── load.py
-│   ├── __pycache__
-│   │   ├── ingest.cpython-310.pyc
-│   │   ├── load.cpython-310.pyc
-│   │   ├── transform.cpython-310.pyc
-│   │   └── validate.cpython-310.pyc
-│   ├── transform.py
-│   ├── utils
-│   │   ├── logger.py
-│   │   ├── __pycache__
-│   │   └── retry.py
-│   └── validate.py
-└── structure.txt
+└── requirements-dev.txt
 ```
+
+---
 
 ## Key Engineering Decisions
 
-- **Parquet format** for columnar storage and improved Athena performance  
-- **Partitioning by `order_date`** to reduce Athena scan cost  
-- **Explicit schema casting** to prevent Spark–Athena type mismatches  
-- **Glue Catalog integration** for external table management  
-- **Idempotent partition overwrite** for safe pipeline re-runs  
+- **Parquet format** for columnar storage and improved Athena performance
+- **Partitioning by `order_date`** to reduce Athena scan cost
+- **Explicit schema casting** to prevent Spark–Athena type mismatches
+- **Glue Catalog integration** for external table management via `MSCK REPAIR TABLE`
+- **Idempotent partition overwrite** for safe pipeline re-runs
+- **Invalid row filtering** — bad records are dropped with a warning, pipeline always continues with valid rows
 
 ---
 
 ## Data Flow
 
-1. Read raw CSV data  
-2. Apply validation rules and type casting  
-3. Write partitioned Parquet files to S3  
-4. Sync partitions with Glue Catalog  
-5. Query data using Athena  
+1. Read raw CSV data from S3
+2. Apply validation rules and type casting — invalid rows filtered out
+3. Transform and select final columns
+4. Write partitioned Parquet files to S3
+5. Sync partitions with Glue Catalog
+6. Query data using Athena
+
+---
+
+## How to Run
+
+### Option 1: Airflow (recommended)
+
+Requires AWS credentials in a `.env` file:
+
+```bash
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
+AWS_DEFAULT_REGION=ap-south-1
+```
+
+Start the stack:
+
+```bash
+docker compose up --build
+```
+
+Open Airflow UI at [http://localhost:8085](http://localhost:8085) (admin / admin), trigger the `batch_data_pipeline` DAG.
+
+### Option 2: Standalone Docker
+
+```bash
+docker build -t spark-batch-pipeline .
+docker run -v ~/.aws:/root/.aws spark-batch-pipeline
+```
+
+### Option 3: Run Without Docker
+
+```bash
+python main.py
+```
+
+---
+
+## Running Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
 
 ---
 
@@ -111,35 +166,13 @@ GROUP BY country;
 
 ---
 
-## How to Run
-
-1. Build Docker Image
-
-```bash
-docker build -t spark-batch-pipeline .
-```
-
-2. Run Container
-
-```bash
-docker run -v ~/.aws:/root/.aws spark-batch-pipeline
-```
-
-## Alternative: Run Without Docker
-Execute:
-
-```bash
-python main.py
-```
-
----
-
 ## Production Considerations
 
-- Handles schema mismatches between Spark and Athena  
-- Prevents malformed Parquet writes  
-- Optimized for Athena scan efficiency  
-- Designed for scalable batch ingestion  
+- Handles schema mismatches between Spark and Athena
+- Prevents malformed Parquet writes
+- Optimized for Athena scan efficiency
+- Designed for scalable batch ingestion
+- Invalid records logged and skipped — pipeline never hard-fails on bad data
 
 ---
 
@@ -147,8 +180,11 @@ python main.py
 
 - Real-world batch data engineering architecture
 - Spark + S3 cloud integration
+- Pipeline orchestration with Apache Airflow
+- Containerised deployment with Docker Compose
+- CI/CD with GitHub Actions (lint, unit tests, docker build, integration test)
 - Metadata-driven analytics via Glue
-- Athena-ready dataset optimization
+- Athena-ready dataset optimisation
 - Production-style pipeline structuring
 
 ---
@@ -156,9 +192,10 @@ python main.py
 ## Roadmap
 
 - [x] Airflow DAG for end-to-end pipeline orchestration
+- [x] CI/CD integration with GitHub Actions
 - [ ] Data quality checks using Great Expectations
-- [ ] CI/CD integration with GitHub Actions
 - [ ] CloudWatch monitoring and alerting
+- [ ] Deploy to EC2 / ECS Fargate for scheduled production runs
 
 ---
 
