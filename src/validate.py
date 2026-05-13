@@ -16,4 +16,5 @@ def validate(df):
         col("order_date").isNotNull()
     )
 
-    return valid_df
+    invalid_count = df.count() - valid_df.count()
+    return valid_df, invalid_count

@@ -15,7 +15,7 @@ clean_path = f"s3a://{bucket}/{config['s3']['clean_path']}"
 spark = get_spark()
 
 df_raw = ingest(spark, "data/input/orders.csv")
-df_valid = validate(df_raw)
+df_valid, _ = validate(df_raw)
 df_clean = transform(df_valid)
 load(df_clean, clean_path)
 
