@@ -26,6 +26,19 @@ The pipeline is orchestrated by Apache Airflow running in Docker, with a full CI
 
 ---
 
+## Pipeline in Action
+
+### Airflow DAG — All Tasks Successful
+![Airflow DAG](docs/airflow_dag.png)
+
+### GitHub Actions CI — All Jobs Passing
+![CI Pipeline](docs/ci_pipeline.png)
+
+### Athena Query Result
+![Athena Result](docs/athena_result.png)
+
+---
+
 ## AWS Services Used
 
 - Amazon S3 – Data lake storage
