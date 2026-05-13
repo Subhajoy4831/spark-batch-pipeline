@@ -70,8 +70,32 @@ jobs:
             sleep 10
           done
 
-      - name: Trigger DAG
+      - name: Wait for DAG to be loaded
         run: |
+          echo "Waiting for DAG to be parsed by scheduler..."
+          for i in $(seq 1 20); do
+            STATUS=$(curl -s -u admin:admin \
+              http://localhost:8085/api/v1/dags/batch_data_pipeline | \
+              python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('dag_id','missing'))" 2>/dev/null)
+            if [ "$STATUS" = "batch_data_pipeline" ]; then
+              echo "DAG loaded after $((i * 10))s"
+              break
+            fi
+            if [ "$i" = "20" ]; then
+              echo "Timed out waiting for DAG to load"
+              exit 1
+            fi
+            echo "Attempt $i/20..."
+            sleep 10
+          done
+
+      - name: Unpause and trigger DAG
+        run: |
+          curl -s -X PATCH http://localhost:8085/api/v1/dags/batch_data_pipeline \
+            -H "Content-Type: application/json" \
+            -u admin:admin \
+            -d '{"is_paused": false}'
+          sleep 3
           RESPONSE=$(curl -sf -X POST http://localhost:8085/api/v1/dags/batch_data_pipeline/dagRuns \
             -H "Content-Type: application/json" \
             -u admin:admin \
