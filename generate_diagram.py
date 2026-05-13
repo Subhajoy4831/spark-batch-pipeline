@@ -1,10 +1,9 @@
-from diagrams import Diagram, Cluster, Edge
+from diagrams import Diagram, Cluster
 from diagrams.aws.storage import S3
 from diagrams.aws.analytics import Glue, Athena
 from diagrams.onprem.workflow import Airflow
 from diagrams.onprem.database import PostgreSQL
 from diagrams.onprem.ci import GithubActions
-from diagrams.onprem.container import Docker
 from diagrams.onprem.analytics import Spark
 
 with Diagram(
