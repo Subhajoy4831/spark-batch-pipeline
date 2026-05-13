@@ -155,7 +155,7 @@ python main.py
 
 ## Roadmap
 
-- [ ] Airflow DAG for end-to-end pipeline orchestration
+- [x] Airflow DAG for end-to-end pipeline orchestration
 - [ ] Data quality checks using Great Expectations
 - [ ] CI/CD integration with GitHub Actions
 - [ ] CloudWatch monitoring and alerting
