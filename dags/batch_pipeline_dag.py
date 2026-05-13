@@ -124,7 +124,6 @@ def task_sync_glue_catalog(**context) -> None:
     import boto3
 
     logger.info("Syncing partitions with Glue Catalog...")
-    glue   = boto3.client("glue", region_name="ap-south-1")
     athena = boto3.client("athena", region_name="ap-south-1")
 
     # Run MSCK REPAIR TABLE via Athena to register new partitions
